@@ -14,28 +14,6 @@ const ChatInterface = ({ cardId, onAIResponseUpdate }) => {
     return [];
   });
 
-  // 检查是否有新添加的矛盾信息
-  const [hasAutoSent, setHasAutoSent] = useState(false);
-
-  useEffect(() => {
-    const conflictData = localStorage.getItem(`conflict_${cardId}`);
-    if (conflictData && !hasAutoSent) {
-      const { issue, description } = JSON.parse(conflictData);
-      const message = `我们最近遇到了一个情侣之间的矛盾，因为${issue}${description ? `\n具体情况是：${description}` : ''}\n请给我一些建议。`;
-      setInputText(message);
-      setHasAutoSent(true);
-    }
-  }, [cardId, hasAutoSent]);
-
-  useEffect(() => {
-    if (inputText && hasAutoSent) {
-      handleSendMessage();
-      // 清除已使用的矛盾信息
-      localStorage.removeItem(`conflict_${cardId}`);
-      setHasAutoSent(false);
-    }
-  }, [inputText, hasAutoSent, cardId]);
-
   const [chatContext, setChatContext] = useState(() => {
     const savedContext = localStorage.getItem(`chat_context_${cardId}`);
     return savedContext ? JSON.parse(savedContext) : {
@@ -43,10 +21,9 @@ const ChatInterface = ({ cardId, onAIResponseUpdate }) => {
       lastUpdated: Date.now()
     };
   });
-  const [conflict, setConflict] = useState(null);
-  const [accumulatedText, setAccumulatedText] = useState('');
-  const [previousText, setPreviousText] = useState('');
-  const [aiMessageId, setAiMessageId] = useState(null);
+
+  const [previousText] = useState('');
+  const [aiMessageId] = useState(null);
 
   // 当消息更新时保存到localStorage
   useEffect(() => {
@@ -68,8 +45,7 @@ const ChatInterface = ({ cardId, onAIResponseUpdate }) => {
   
   // 监听accumulatedText的变化，更新消息显示
   useEffect(() => {
-    if (aiMessageId && accumulatedText) {
-      setPreviousText(accumulatedText);
+    if (aiMessageId && previousText) {
       setMessages(prev => {
         const newMessages = prev.filter(msg => msg.id !== aiMessageId);
         return [...newMessages, {
@@ -82,9 +58,10 @@ const ChatInterface = ({ cardId, onAIResponseUpdate }) => {
         onAIResponseUpdate(previousText);
       }
     }
-  }, [accumulatedText, aiMessageId, previousText, onAIResponseUpdate]);
+  }, [aiMessageId, previousText, onAIResponseUpdate]);
 
   const [isTyping, setIsTyping] = useState(false);
+  const [hasAutoSent, setHasAutoSent] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
