@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { SendOutlined, SmileOutlined, LoadingOutlined } from '@ant-design/icons';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { SmileOutlined, LoadingOutlined } from '@ant-design/icons';
 import '../styles/ChatInterface.css';
 
 const ChatInterface = ({ cardId, onAIResponseUpdate }) => {
@@ -71,23 +71,18 @@ const ChatInterface = ({ cardId, onAIResponseUpdate }) => {
     if (aiMessageId && accumulatedText) {
       setPreviousText(accumulatedText);
       setMessages(prev => {
-        const aiMessage = {
-          id: aiMessageId,
-          text: previousText,
-          sender: 'ai'
-        };
-        if (onAIResponseUpdate) {
-          onAIResponseUpdate(previousText);
-        }
         const newMessages = prev.filter(msg => msg.id !== aiMessageId);
         return [...newMessages, {
           id: aiMessageId,
-          text: previousText, // 使用上一次的文本，忽略最后一次输出
+          text: previousText,
           sender: 'ai'
         }];
       });
+      if (onAIResponseUpdate) {
+        onAIResponseUpdate(previousText);
+      }
     }
-  }, [accumulatedText, aiMessageId]);
+  }, [accumulatedText, aiMessageId, previousText, onAIResponseUpdate]);
 
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
@@ -100,92 +95,26 @@ const ChatInterface = ({ cardId, onAIResponseUpdate }) => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = async () => {
-    if (!inputText.trim()) return;
-
-    const userMessage = {
-      id: Date.now(),
-      text: inputText,
-      sender: 'user'
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputText('');
-    setIsTyping(true);
-    setAccumulatedText(''); // 重置累积文本
-
-    try {
-      const response = await fetch('https://api.coze.cn/v3/chat', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer pat_itNxi2PHGiFpMLQjui8mgdlxumkA3pBNT2aMsAtxhP0A2VHvBBsaMytyZpBgragV',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          bot_id: '7486395199090933797',
-          user_id: '3208801137213140',
-          stream: true,
-          auto_save_history: true,
-          additional_messages: [...chatContext.history.map(msg => ({
-            role: msg.role,
-            content: msg.content,
-            content_type: 'text'
-          })), {
-            role: 'user',
-            content: inputText,
-            content_type: 'text'
-          }]
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`网络响应异常: ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
+  const handleSendMessage = useCallback(() => {
+    if (inputText.trim()) {
       const newMessageId = Date.now();
-      setAiMessageId(newMessageId);
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const text = line.slice(5).trim();
-            if (text) {
-              try {
-                const jsonData = JSON.parse(text);
-                if (jsonData.type === 'answer') {
-                  const content = jsonData.content || '';
-                  setAccumulatedText(prev => prev + content);
-                }
-              } catch (e) {
-                console.error('JSON解析错误:', e);
-              }
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('发送消息失败:', error);
-      const aiMessage = {
-        id: Date.now(),
-        text: `抱歉，${error.message || '发送消息时出现错误'}`,
-        sender: 'ai'
-      };
-      setMessages(prev => [...prev, aiMessage]);
-      if (onAIResponseUpdate) {
-        onAIResponseUpdate(aiMessage.text);
-      }
-    } finally {
-      setIsTyping(false);
+      setMessages(prev => [...prev, {
+        id: newMessageId,
+        text: inputText,
+        sender: 'user'
+      }]);
+      setInputText('');
+      setIsTyping(true);
     }
-  };
+  }, [inputText]);
+
+  useEffect(() => {
+    if (inputText && hasAutoSent) {
+      handleSendMessage();
+      localStorage.removeItem(`conflict_${cardId}`);
+      setHasAutoSent(false);
+    }
+  }, [inputText, hasAutoSent, cardId, handleSendMessage]);
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
