@@ -14,14 +14,6 @@ const ChatInterface = ({ cardId, onAIResponseUpdate }) => {
     return [];
   });
 
-  const [chatContext, setChatContext] = useState(() => {
-    const savedContext = localStorage.getItem(`chat_context_${cardId}`);
-    return savedContext ? JSON.parse(savedContext) : {
-      history: [],
-      lastUpdated: Date.now()
-    };
-  });
-
   const [previousText] = useState('');
   const [aiMessageId] = useState(null);
 
@@ -38,7 +30,6 @@ const ChatInterface = ({ cardId, onAIResponseUpdate }) => {
         })),
         lastUpdated: Date.now()
       };
-      setChatContext(newContext);
       localStorage.setItem(`chat_context_${cardId}`, JSON.stringify(newContext));
     }
   }, [messages, cardId]);
