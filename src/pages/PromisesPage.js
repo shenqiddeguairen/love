@@ -112,15 +112,32 @@ const PromisesPage = () => {
       setRecordingMedia(URL.createObjectURL(file));
       setRecordedBlob(file);
     } else if (newPromise.type === 'text' && (file.type.includes('text') || file.type.includes('document') || file.type.includes('pdf'))) {
-      // 对于文本文件，读取内容
+      // 对于文本文件，使用合适的编码方式读取内容
       const reader = new FileReader();
       reader.onload = (event) => {
-        setNewPromise(prev => ({
-          ...prev,
-          content: event.target.result.substring(0, 1000) // 限制文本长度
-        }));
+        try {
+          // 尝试使用不同的编码方式解码
+          let content = event.target.result;
+          if (content.includes('�')) {
+            // 如果检测到乱码，尝试使用其他编码方式
+            const blob = new Blob([file], { type: file.type });
+            reader.readAsText(blob, 'gbk');
+            return;
+          }
+          setNewPromise(prev => ({
+            ...prev,
+            content: content.substring(0, 1000) // 限制文本长度
+          }));
+        } catch (error) {
+          console.error('文件读取错误:', error);
+          alert('文件读取失败，请检查文件格式是否正确');
+        }
       };
-      reader.readAsText(file);
+      reader.onerror = () => {
+        console.error('文件读取错误');
+        alert('文件读取失败，请检查文件格式是否正确');
+      };
+      reader.readAsText(file, 'utf-8');
     }
   };
 
@@ -130,7 +147,13 @@ const PromisesPage = () => {
     if ((newPromise.type === 'audio' || newPromise.type === 'video') && (!recordedBlob || !newPromise.description.trim())) return;
     
     let content = newPromise.content;
-    if (newPromise.type === 'audio' || newPromise.type === 'video') {
+    let documentContent = null;
+    
+    if (newPromise.type === 'text' && uploadedFile) {
+      // 如果是文本类型且有上传文件，保持原始承诺内容不变
+      documentContent = content;
+      content = newPromise.content;
+    } else if (newPromise.type === 'audio' || newPromise.type === 'video') {
       content = URL.createObjectURL(recordedBlob);
     }
     
@@ -141,7 +164,8 @@ const PromisesPage = () => {
       date: new Date().toISOString().slice(0, 10),
       tag: newPromise.tag || "承诺",
       type: newPromise.type,
-      fileName: uploadedFile ? uploadedFile.name : null
+      fileName: uploadedFile ? uploadedFile.name : null,
+      documentContent: documentContent
     };
     
     setPromises([promise, ...promises]);
@@ -310,7 +334,7 @@ const PromisesPage = () => {
                       id="description"
                       name="description"
                       className="form-control"
-                      placeholder="写下你想对Ta说的甜言蜜语..."
+                      placeholder="(写下你想对Ta说)或者(Ta对你说）的甜言蜜语..."
                       value={newPromise.description}
                       onChange={handleChange}
                       rows="3"
@@ -326,7 +350,7 @@ const PromisesPage = () => {
                       id="description"
                       name="description"
                       className="form-control"
-                      placeholder="写下你想对Ta说的话..."
+                      placeholder="写下（你想对Ta说）或者（Ta对你说的）的话..."
                       value={newPromise.description}
                       onChange={handleChange}
                       rows="3"
@@ -389,7 +413,7 @@ const PromisesPage = () => {
         {newPromise.type === 'text' ? (
           <>
             <div className="form-group">
-              <label htmlFor="content">你的承诺</label>
+              <label htmlFor="content">誓言承诺</label>
               <textarea
                 id="content"
                 name="content"
@@ -489,7 +513,34 @@ const PromisesPage = () => {
 
   const renderPromiseContent = (promise) => {
     if (promise.type === 'text') {
-      return <div className="promise-content">"{promise.content}"</div>;
+      return (
+        <div className="promise-content">
+          <div className="promise-text">"{promise.content}"</div>
+          {promise.documentContent && (
+            <div className="document-attachment">
+              <div className="document-header">
+                <FileTextOutlined className="document-icon" />
+                <span 
+                  className="document-title clickable" 
+                  onClick={() => {
+                    const blob = new Blob([promise.documentContent], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = promise.fileName || '文档.txt';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  {promise.fileName || '附件文档'}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      );
     } else if (promise.type === 'audio') {
       return (
         <div className="promise-media">
